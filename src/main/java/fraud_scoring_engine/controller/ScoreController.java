@@ -1,6 +1,6 @@
 package fraud_scoring_engine.controller;
 
-import fraud_scoring_engine.dto.UserEventsResponse;
+import fraud_scoring_engine.dto.ScoreResponse;
 import fraud_scoring_engine.service.ScoreService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,11 +20,11 @@ public class ScoreController {
     }
 
     @GetMapping("/score/{userId}")
-    public ResponseEntity<UserEventsResponse> getScore(
+    public ResponseEntity<ScoreResponse> getScore(
             @PathVariable String userId,
             @RequestParam UUID clientId) {
 
-        UserEventsResponse response = scoreService.getUserEvents(clientId, userId);
+        ScoreResponse response = scoreService.computeScore(clientId, userId);
         return ResponseEntity.ok(response);
     }
 }
