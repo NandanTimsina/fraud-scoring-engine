@@ -2,6 +2,8 @@ package fraud_scoring_engine.controller;
 
 import fraud_scoring_engine.dto.EventCreateRequest;
 import fraud_scoring_engine.dto.EventResponse;
+import fraud_scoring_engine.model.Client;
+import fraud_scoring_engine.security.AuthenticatedClient;
 import fraud_scoring_engine.service.EventService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -23,7 +25,8 @@ public class EventController {
 
     @PostMapping
     public ResponseEntity<EventResponse> createEvent(@Valid @RequestBody EventCreateRequest request) {
-        EventResponse response = eventService.createEvent(request);
+        Client client = AuthenticatedClient.get();
+        EventResponse response = eventService.createEvent(client.getId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }
