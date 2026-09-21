@@ -5,6 +5,7 @@ import fraud_scoring_engine.dto.EventResponse;
 import fraud_scoring_engine.model.Event;
 import fraud_scoring_engine.repository.EventRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.cache.annotation.CacheEvict;
 
 import java.util.UUID;
 
@@ -17,6 +18,7 @@ public class EventService {
         this.eventRepository = eventRepository;
     }
 
+    @CacheEvict(value = "scores", key = "#clientId + '::' + #request.getUserId()")
     public EventResponse createEvent(UUID clientId, EventCreateRequest request) {
         Event event = new Event();
         event.setClientId(clientId);

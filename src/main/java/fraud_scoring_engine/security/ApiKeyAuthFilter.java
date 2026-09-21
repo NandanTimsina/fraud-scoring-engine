@@ -41,6 +41,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         String apiKey = request.getHeader("X-API-Key");
+        System.out.println("DEBUG - Received API key header: [" + apiKey + "]");
 
         if (apiKey == null || apiKey.isBlank()) {
             filterChain.doFilter(request, response);

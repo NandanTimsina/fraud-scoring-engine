@@ -11,6 +11,7 @@ import fraud_scoring_engine.scoring.RulesEngine;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.cache.annotation.Cacheable;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +32,7 @@ public class ScoreService {
         this.riskAssessmentRepository = riskAssessmentRepository;
     }
 
+    @Cacheable(value = "scores", key = "#clientId + '::' + #userId")
     public ScoreResponse computeScore(UUID clientId, String userId) {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Client not found"));

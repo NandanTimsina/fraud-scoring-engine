@@ -18,6 +18,7 @@ public class ScoreController {
         this.scoreService = scoreService;
     }
 
+
     @GetMapping("/score/{userId}")
     public ResponseEntity<ScoreResponse> getScore(@PathVariable String userId) {
         Client client = AuthenticatedClient.get();
