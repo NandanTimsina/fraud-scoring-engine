@@ -4,8 +4,8 @@ import fraud_scoring_engine.dto.EventCreateRequest;
 import fraud_scoring_engine.dto.EventResponse;
 import fraud_scoring_engine.model.Event;
 import fraud_scoring_engine.repository.EventRepository;
-import org.springframework.stereotype.Service;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
