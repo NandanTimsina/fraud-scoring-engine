@@ -2,7 +2,11 @@
 
 A standalone B2B trust and fraud scoring service. Marketplace platforms (think OLX or Facebook Marketplace) send in behavioral events about their users — account creation, listings posted, complaints filed — and this service computes an explainable risk score on demand, backed by a configurable, data-driven rules engine.
 
-This is infrastructure, not an application. It doesn't have a UI or end-users of its own; other backend systems call it as a service.
+This is infrastructure, not an application. Other backend systems call it as a service. A small demo page is included so the API can be tried in a browser.
+
+**Live demo:** http://fraud-scoring-engine.duckdns.org:8080/
+
+Register a client, submit an event and fetch a score, all from the page. API credentials are handled automatically behind the scenes.
 
 ## How it works
 
@@ -22,7 +26,7 @@ The service only ever sees a pseudonymous user ID, an event type, a timestamp, a
 
 ### Rules as data, not code
 
-Scoring logic is not a chain of hardcoded if statements. Each rule is an object with a name, a weight, and a condition function, and all rules live together in one place. Adding, removing, or reweighting a rule is a one-line change, not a refactor.
+Scoring logic is not a chain of hardcoded `if` statements. Each rule is an object with a name, a weight, and a condition function, and all rules live together in one place. Adding, removing, or reweighting a rule is a one-line change, not a refactor.
 
 ### Explainability over a black-box number
 
@@ -30,19 +34,23 @@ The API never returns a bare score. It always returns the score alongside the sp
 
 ### B2B API-key auth, not user login
 
-Clients of this service are other backend platforms, not people. There is no login form or session — a client authenticates every request with a static API key, verified against a bcrypt hash. Nothing is ever stored or returned in plaintext after the initial registration.
+Clients of this service are other backend platforms, not people. There is no login form or session — a client authenticates every request with an API key, verified against a bcrypt hash. Nothing is stored or returned in plaintext after the initial registration.
+
+### Cached scores
+
+Score lookups use a cache-aside pattern with Redis. A cached score is evicted whenever a new event arrives for that user, so callers never receive a stale result.
 
 ## Tech stack
 
-* Java 17 / Spring Boot — REST API, dependency injection
-* PostgreSQL — primary datastore, with JSONB for flexible event metadata
-* Spring Data JPA / Hibernate — ORM layer
-* Spring Security — API key authentication filter chain
-* BCrypt — one-way hashing for API keys
-* Docker Compose — local Postgres, no native install required
-* Redis (in progress) — cache-aside pattern for score lookups
-* AWS SQS (planned) — asynchronous event ingestion
-* Lombok — boilerplate reduction
+* **Java 17 / Spring Boot** — REST API, dependency injection
+* **PostgreSQL** — primary datastore, with JSONB for flexible event metadata
+* **Spring Data JPA / Hibernate** — ORM layer
+* **Spring Security** — API key authentication filter chain
+* **BCrypt** — one-way hashing for API keys
+* **Redis** — cache-aside caching for score lookups, with eviction on new events
+* **Docker / Docker Compose** — full stack (app, Postgres, Redis) in containers
+* **AWS EC2** — deployment
+* **AWS SQS** *(planned)* — asynchronous event ingestion
 
 ## API overview
 
@@ -52,25 +60,33 @@ Clients of this service are other backend platforms, not people. There is no log
 | `POST` | `/events`           | Yes (`X-API-Key`) | Records a behavioral event for a user                       |
 | `GET`  | `/score/{userId}`   | Yes (`X-API-Key`) | Computes and returns the user's current risk score          |
 
-All authenticated endpoints derive the calling client from the API key itself — a client can never see or affect another client's data, even if it somehow obtained another client's internal ID.
+Requests to protected endpoints without a valid `X-API-Key` header receive `401 Unauthorized`.
 
 ## Running locally
 
-Prerequisites: Java 17+, Maven, Docker Desktop.
+**Prerequisites:** Docker Desktop.
 
-### 1. Start Postgres
-
-```bash
-docker-compose up -d
-```
-
-### 2. Run the app
+Start the whole stack (app, PostgreSQL and Redis):
 
 ```bash
-./mvnw spring-boot:run
+docker compose up --build -d
 ```
 
-The API is now available at http://localhost:8080.
+The API and demo page are now available at `http://localhost:8080`.
+
+To stop everything:
+
+```bash
+docker compose down
+```
+
+**Running from an IDE instead:** start only the databases with:
+
+```bash
+docker compose up -d postgres redis
+```
+
+Then run the Spring Boot app from your IDE (Java 17+ required). Point the datasource and Redis host at `localhost`.
 
 ## Example usage
 
@@ -78,28 +94,41 @@ The API is now available at http://localhost:8080.
 
 ```bash
 curl -X POST http://localhost:8080/clients/register \
--H "Content-Type: application/json" \
--d '{"name": "Example Marketplace"}'
+  -H "Content-Type: application/json" \
+  -d '{"name": "Example Marketplace"}'
 ```
+
+The response contains your `clientId` and `apiKey`. Save the key — it is shown only once.
 
 ### Send an event
 
-Using the API key from the response above:
-
 ```bash
 curl -X POST http://localhost:8080/events \
--H "Content-Type: application/json" \
--H "X-API-Key: <your-api-key>" \
--d '{"userId": "user_123", "type": "account_created"}'
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <your-api-key>" \
+  -d '{"clientId": "<your-client-id>", "userId": "user_123", "type": "complaint_filed", "metadata": {"reason": "testing"}}'
 ```
 
 ### Get a score
 
 ```bash
 curl http://localhost:8080/score/user_123 \
--H "X-API-Key: <your-api-key>"
+  -H "X-API-Key: <your-api-key>"
+```
+
+## Deployment
+
+The project runs on an AWS EC2 instance using Docker Compose.
+
+To deploy an update:
+
+```bash
+git pull
+docker compose up --build -d
 ```
 
 ## Status
 
-This project is under active development. Core functionality — schema, event ingestion, the rules engine, and API-key authentication — is complete and tested.
+Core functionality is complete and deployed: schema, event ingestion, the rules engine, API-key authentication, Redis score caching and the Dockerised deployment.
+
+Asynchronous ingestion through AWS SQS is planned next.
