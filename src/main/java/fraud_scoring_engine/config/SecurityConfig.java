@@ -33,6 +33,7 @@ public class SecurityConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         http.authorizeHttpRequests(requests -> requests
+                .requestMatchers("/", "/index.html", "/error").permitAll()
                 .requestMatchers(HttpMethod.POST, "/clients/register").permitAll()
                 .anyRequest().authenticated());
 

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fraud Scoring Engine — Live Demo</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f1115;
+    color: #e6e6e6;
+    margin: 0;
+    padding: 40px 20px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 1.8rem; margin-bottom: 4px; }
+  .sub { color: #9aa0a6; margin-bottom: 32px; }
+  .card {
+    background: #1a1d23;
+    border: 1px solid #2a2e37;
+    border-radius: 10px;
+    padding: 22px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 1.1rem; margin-top: 0; margin-bottom: 14px; color: #7dd3fc; }
+  label { display: block; font-size: 0.85rem; color: #b0b6bf; margin: 10px 0 4px; }
+  input, textarea {
+    width: 100%;
+    padding: 9px 10px;
+    background: #10131a;
+    border: 1px solid #2f333d;
+    border-radius: 6px;
+    color: #e6e6e6;
+    font-size: 0.9rem;
+  }
+  input[readonly] { color: #9aa0a6; cursor: not-allowed; font-family: monospace; }
+  button {
+    margin-top: 16px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  button:hover { background: #1d4ed8; }
+  pre {
+    background: #0b0d12;
+    border: 1px solid #2a2e37;
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 14px;
+    font-size: 0.82rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 20px;
+  }
+  .status { font-size: 0.78rem; margin-top: 6px; }
+  .ok { color: #4ade80; }
+  .err { color: #f87171; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Fraud Scoring Engine</h1>
+  <p class="sub">Live API demo — Spring Boot · PostgreSQL · Redis · Docker · AWS EC2</p>
+
+  <!-- REGISTER -->
+  <div class="card">
+    <h2>1. Register Client</h2>
+    <label>Name</label>
+    <input id="reg-name" value="Test Client">
+    <button onclick="registerClient()">Register</button>
+    <div id="reg-status" class="status"></div>
+    <label>Client ID</label>
+    <input id="reg-clientid" readonly placeholder="filled automatically after registering">
+    <label>API Key</label>
+    <input id="reg-key" readonly placeholder="filled automatically after registering">
+  </div>
+
+  <!-- EVENT -->
+  <div class="card">
+    <h2>2. Submit Event</h2>
+    <label>User ID</label>
+    <input id="ev-userid" value="user_123">
+    <label>Type</label>
+    <input id="ev-type" value="complaint_filed">
+    <label>Metadata (JSON)</label>
+    <textarea id="ev-meta" rows="2">{"reason": "testing"}</textarea>
+    <button onclick="submitEvent()">Submit Event</button>
+    <div id="ev-status" class="status"></div>
+    <pre id="ev-out"></pre>
+  </div>
+
+  <!-- SCORE -->
+  <div class="card">
+    <h2>3. Get Fraud Score</h2>
+    <label>User ID</label>
+    <input id="sc-userid" value="user_123">
+    <button onclick="getScore()">Get Score</button>
+    <div id="sc-status" class="status"></div>
+    <pre id="sc-out"></pre>
+  </div>
+</div>
+
+<script>
+  const BASE = window.location.origin; // uses whatever host serves this page
+
+  // Real credentials live only here, never in the input boxes.
+  let apiKey = null;
+  let clientId = null;
+
+  function mask(v) {
+    if (!v) return '';
+    return v.slice(0, 4) + 'xxxxxxxx';
+  }
+
+  function showCreds() {
+    document.getElementById('reg-clientid').value = mask(clientId);
+    document.getElementById('reg-key').value = mask(apiKey);
+  }
+
+  function setStatus(el, msg, cls) {
+    el.textContent = msg;
+    el.className = 'status ' + (cls || '');
+  }
+
+  // Restore after a page refresh (cleared when the tab is closed)
+  try {
+    apiKey = sessionStorage.getItem('apiKey');
+    clientId = sessionStorage.getItem('clientId');
+    if (apiKey && clientId) {
+      showCreds();
+      setStatus(document.getElementById('reg-status'), 'Client registered ✓', 'ok');
+    }
+  } catch (e) {}
+
+  async function callApi(url, opts, outEl, statusEl) {
+    setStatus(statusEl, 'Sending...');
+    try {
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      let pretty = text;
+      try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+      if (outEl) outEl.textContent = pretty || '(empty response)';
+      if (res.ok) setStatus(statusEl, 'Success (' + res.status + ')', 'ok');
+      else setStatus(statusEl, 'Error (' + res.status + ')', 'err');
+      return text;
+    } catch (e) {
+      if (outEl) outEl.textContent = String(e);
+      setStatus(statusEl, 'Request failed', 'err');
+    }
+  }
+
+  async function registerClient() {
+    const name = document.getElementById('reg-name').value;
+    const status = document.getElementById('reg-status');
+    const text = await callApi(BASE + '/clients/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    }, null, status);
+    try {
+      const json = JSON.parse(text);
+      apiKey = json.apiKey || json.key || null;
+      clientId = json.id || json.clientId || null;
+      if (!apiKey || !clientId) {
+        setStatus(status, 'Registered, but response had no apiKey/id fields', 'err');
+        return;
+      }
+      try {
+        sessionStorage.setItem('apiKey', apiKey);
+        sessionStorage.setItem('clientId', clientId);
+      } catch (e) {}
+      showCreds();
+      setStatus(status, 'Client registered ✓', 'ok');
+    } catch (e) {}
+  }
+
+  async function submitEvent() {
+    const out = document.getElementById('ev-out');
+    const status = document.getElementById('ev-status');
+    if (!apiKey || !clientId) { setStatus(status, 'Register a client first (step 1)', 'err'); return; }
+    const userId = document.getElementById('ev-userid').value;
+    const type = document.getElementById('ev-type').value;
+    let metadata;
+    try { metadata = JSON.parse(document.getElementById('ev-meta').value); }
+    catch (e) { setStatus(status, 'Metadata is not valid JSON', 'err'); return; }
+    await callApi(BASE + '/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      body: JSON.stringify({ clientId, userId, type, metadata })
+    }, out, status);
+  }
+
+  async function getScore() {
+    const out = document.getElementById('sc-out');
+    const status = document.getElementById('sc-status');
+    if (!apiKey) { setStatus(status, 'Register a client first (step 1)', 'err'); return; }
+    const userId = document.getElementById('sc-userid').value;
+    await callApi(BASE + '/score/' + encodeURIComponent(userId), {
+      method: 'GET',
+      headers: { 'X-API-Key': apiKey }
+    }, out, status);
+  }
+</script>
+</body>
+</html>
