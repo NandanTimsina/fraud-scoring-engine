@@ -24,7 +24,7 @@ public class ClientService {
 
     public ClientRegisterResponse registerClient(ClientRegisterRequest request) {
         String rawApiKey = generateApiKey();
-        String hashedApiKey = passwordEncoder.encode(rawApiKey);
+        String hashedApiKey = passwordEncoder.encode(rawApiKey);   // only the random part is hashed
 
         Client client = new Client();
         client.setName(request.getName());
@@ -32,7 +32,12 @@ public class ClientService {
 
         Client saved = clientRepository.save(client);
 
-        return new ClientRegisterResponse(saved.getId(), saved.getName(), rawApiKey);
+        // The key given to the caller is "<clientId>.<randomPart>" so the filter
+        // can find this one client directly instead of scanning all of them.
+
+        String fullApiKey = saved.getId() + "." + rawApiKey;
+
+        return new ClientRegisterResponse(saved.getId(), saved.getName(), fullApiKey);
     }
 
     private String generateApiKey() {

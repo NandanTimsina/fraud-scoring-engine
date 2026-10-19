@@ -15,7 +15,8 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,6 +38,8 @@ class ApiKeyAuthFilterTest {
     private MockHttpServletResponse response;
     private MockFilterChain chain;
 
+    private final UUID clientId = UUID.randomUUID();
+
     @BeforeEach
     void setUp() {
         filter = new ApiKeyAuthFilter(clientRepository, passwordEncoder, entryPoint);
@@ -53,6 +56,7 @@ class ApiKeyAuthFilterTest {
 
     private Client activeClient() {
         Client client = new Client();
+        client.setId(clientId);
         client.setName("Example Marketplace");
         client.setApiKeyHash("stored-hash");
         client.setActive(true);
@@ -62,28 +66,39 @@ class ApiKeyAuthFilterTest {
     @Test
     void validKey_authenticatesClientAndContinues() throws Exception {
         Client client = activeClient();
-        request.addHeader("X-API-Key", "good-key");
-        when(clientRepository.findAll()).thenReturn(List.of(client));
-        when(passwordEncoder.matches("good-key", "stored-hash")).thenReturn(true);
+        request.addHeader("X-API-Key", clientId + ".good-secret");
+        when(clientRepository.findById(clientId)).thenReturn(Optional.of(client));
+        when(passwordEncoder.matches("good-secret", "stored-hash")).thenReturn(true);
 
         filter.doFilter(request, response, chain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal()).isSameAs(client);
-        assertThat(chain.getRequest()).isNotNull();          // request was passed on
+        assertThat(chain.getRequest()).isNotNull();
         verifyNoInteractions(entryPoint);
     }
 
     @Test
-    void wrongKey_isRejectedAndRequestStops() throws Exception {
-        request.addHeader("X-API-Key", "bad-key");
-        when(clientRepository.findAll()).thenReturn(List.of(activeClient()));
-        when(passwordEncoder.matches("bad-key", "stored-hash")).thenReturn(false);
+    void wrongSecret_isRejectedAndRequestStops() throws Exception {
+        request.addHeader("X-API-Key", clientId + ".bad-secret");
+        when(clientRepository.findById(clientId)).thenReturn(Optional.of(activeClient()));
+        when(passwordEncoder.matches("bad-secret", "stored-hash")).thenReturn(false);
 
         filter.doFilter(request, response, chain);
 
         verify(entryPoint).commence(eq(request), eq(response), any(AuthenticationException.class));
-        assertThat(chain.getRequest()).isNull();             // chain was never called
+        assertThat(chain.getRequest()).isNull();
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    void malformedKey_isRejectedWithoutTouchingTheDatabase() throws Exception {
+        request.addHeader("X-API-Key", "no-dot-in-this-key");
+
+        filter.doFilter(request, response, chain);
+
+        verify(entryPoint).commence(eq(request), eq(response), any(AuthenticationException.class));
+        verifyNoInteractions(clientRepository);
+        assertThat(chain.getRequest()).isNull();
     }
 
     @Test

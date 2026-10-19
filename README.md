@@ -1,6 +1,10 @@
 # Fraud Scoring Engine
 
-A standalone B2B trust and fraud scoring service. Marketplace platforms (think OLX or Facebook Marketplace) send in behavioral events about their users — account creation, listings posted, complaints filed — and this service computes an explainable risk score on demand, backed by a configurable, data-driven rules engine.
+![Build](https://github.com/NandanTimsina/fraud-scoring-engine/actions/workflows/build.yml/badge.svg)
+
+Helps online marketplaces spot risky users, and explains exactly why each one was flagged.
+
+A standalone B2B trust and fraud scoring service. Marketplace platforms (think OLX or Facebook Marketplace) send in behavioral events about their users — account creation, listings posted, complaints filed — and this service computes an explainable risk score on demand, backed by a weighted rules engine where each rule is a small, separately defined object.
 
 This is infrastructure, not an application. Other backend systems call it as a service. A small demo page is included so the API can be tried in a browser.
 
@@ -24,7 +28,7 @@ All clients' events live in a single shared table, but every row is scoped by `c
 
 The service only ever sees a pseudonymous user ID, an event type, a timestamp, and optional metadata supplied by the client. It was designed from the start to never need or store personal information.
 
-### Rules as data, not code
+### Rules as objects, not if-else chains
 
 Scoring logic is not a chain of hardcoded `if` statements. Each rule is an object with a name, a weight, and a condition function, and all rules live together in one place. Adding, removing, or reweighting a rule is a one-line change, not a refactor.
 
@@ -39,6 +43,7 @@ Clients of this service are other backend platforms, not people. There is no log
 ### Cached scores
 
 Score lookups use a cache-aside pattern with Redis. A cached score is evicted whenever a new event arrives for that user, so callers never receive a stale result.
+Entries also expire after 10 minutes as a safety net.
 
 ## Tech stack
 
@@ -61,6 +66,10 @@ Score lookups use a cache-aside pattern with Redis. A cached score is evicted wh
 | `GET`  | `/score/{userId}`   | Yes (`X-API-Key`) | Computes and returns the user's current risk score          |
 
 Requests to protected endpoints without a valid `X-API-Key` header receive `401 Unauthorized`.
+
+## Testing
+
+11 automated tests (JUnit, Mockito) cover the rules engine, the score service and API-key authentication, and run automatically on every push through GitHub Actions. Run them locally with `./mvnw test`.
 
 ## Running locally
 
@@ -132,3 +141,9 @@ docker compose up --build -d
 Core functionality is complete and deployed: schema, event ingestion, the rules engine, API-key authentication, Redis score caching and the Dockerised deployment.
 
 Asynchronous ingestion through AWS SQS is planned next.
+
+## Known limitations
+
+- API keys are checked against each stored hash, which is fine for a small number of clients but would need a key-ID lookup at larger scale.
+- The live demo runs over HTTP, not HTTPS.
+- Asynchronous ingestion (AWS SQS) is planned but not built yet.

@@ -17,8 +17,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
@@ -67,9 +67,21 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
     }
 
     private Optional<Client> findClientByRawKey(String rawKey) {
-        List<Client> allClients = clientRepository.findAll();
-        return allClients.stream()
-                .filter(c -> passwordEncoder.matches(rawKey, c.getApiKeyHash()))
-                .findFirst();
+        int dot = rawKey.indexOf('.');
+        if (dot <= 0 || dot == rawKey.length() - 1) {
+            return Optional.empty();
+        }
+
+        UUID clientId;
+        try {
+            clientId = UUID.fromString(rawKey.substring(0, dot));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+
+        String secret = rawKey.substring(dot + 1);
+
+        return clientRepository.findById(clientId)
+                .filter(c -> passwordEncoder.matches(secret, c.getApiKeyHash()));
     }
 }
