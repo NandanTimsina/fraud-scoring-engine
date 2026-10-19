@@ -38,8 +38,11 @@ The API never returns a bare score. It always returns the score alongside the sp
 
 ### B2B API-key auth, not user login
 
-Clients of this service are other backend platforms, not people. There is no login form or session — a client authenticates every request with an API key, verified against a bcrypt hash. Nothing is stored or returned in plaintext after the initial registration.
+Clients of this service are other backend platforms, not people. There is no login form or session. A client authenticates every request with an API key in the form `<clientId>.<secret>`. The service finds the client by its ID (a primary-key lookup) and verifies the secret against a bcrypt hash, so each request costs one lookup and one hash check, no matter how many clients exist. Nothing is stored or returned in plaintext after the initial registration.
 
+### Constant-cost key lookup
+
+An earlier version checked each request's key against every client's bcrypt hash, so authentication got slower with every client that registered. Splitting the key into `<clientId>.<secret>` fixed that: the cost per request no longer depends on the number of clients.
 ### Cached scores
 
 Score lookups use a cache-aside pattern with Redis. A cached score is evicted whenever a new event arrives for that user, so callers never receive a stale result.
@@ -107,7 +110,7 @@ curl -X POST http://localhost:8080/clients/register \
   -d '{"name": "Example Marketplace"}'
 ```
 
-The response contains your `clientId` and `apiKey`. Save the key — it is shown only once.
+The response contains your `clientId` and `apiKey`. The `apiKey` has the form `<clientId>.<secret>`; send it as-is in the `X-API-Key` header. Save it, because it is shown only once.
 
 ### Send an event
 
@@ -144,6 +147,5 @@ Asynchronous ingestion through AWS SQS is planned next.
 
 ## Known limitations
 
-- API keys are checked against each stored hash, which is fine for a small number of clients but would need a key-ID lookup at larger scale.
 - The live demo runs over HTTP, not HTTPS.
 - Asynchronous ingestion (AWS SQS) is planned but not built yet.
